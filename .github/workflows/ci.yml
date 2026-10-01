@@ -1,36 +1,65 @@
-name: CI
+name: CI/CD Pipeline
 
 on:
   push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
+    branches: [ main, master ]
 
 jobs:
-  lint-backend:
+  deploy-frontend:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - name: Install Ruff
-        run: pip install ruff
-      - name: Run Ruff
-        run: ruff check back/
+      - name: Checkout code
+        uses: actions/checkout@v3
 
-  lint-frontend:
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+
+      - name: Install and Build Frontend
+        run: |
+          cd front
+          npm install
+          npm run build
+        env:
+          VITE_API_URL: ${{ secrets.VITE_API_URL }}
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-central-1
+
+      - name: Deploy Frontend to S3
+        run: |
+          aws s3 sync front/dist s3://spry2-frontend-solosun0308 --delete
+
+  deploy-backend:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v2
         with:
-          node-version: '22'
-      - name: Install dependencies
-        working-directory: ./front
-        run: npm ci
-      - name: Run ESLint
-        working-directory: ./front
-        run: npm run lint
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-central-1
+
+      - name: Log in to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+
+      - name: Build and Push Lambda Docker Image
+        run: |
+          docker build -f ./back/Dockerfile.lambda -t spry-backend-lambda ./back
+          docker tag spry-backend-lambda:latest 891447916595.dkr.ecr.eu-central-1.amazonaws.com/spry-backend:lambda
+          docker push 891447916595.dkr.ecr.eu-central-1.amazonaws.com/spry-backend:lambda
+
+      - name: Update Lambda Function Code
+        run: |
+          aws lambda update-function-code \
+            --function-name spry-backend \
+            --image-uri 891447916595.dkr.ecr.eu-central-1.amazonaws.com/spry-backend:lambda

@@ -367,16 +367,15 @@ help: ## Show this help
 	  /^[a-zA-Z_.-]+:.*?##/ { printf "  \033[36m%-26s\033[0m %s\n", $$1, $$2 } \
 	  /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) }' $(MAKEFILE_LIST)
 
-.PHONY: deploy-frontend deploy-backend
+.PHONY: build-frontend deploy-frontend deploy-backend
 
-deploy-frontend:
-	@echo "Building frontend..."
-	cd front && npm run build
-	@echo "Deploying frontend to S3 and invalidating CloudFront..."
-	# Тут будуть AWS команди для S3 та CloudFront
+build-frontend:
+	cd front && npm install && npm run build
+
+deploy-frontend: build-frontend
+	aws s3 sync front/dist s3://spry2-frontend-solosun0308 --delete
+	@echo "Frontend successfully deployed to S3!"
 
 deploy-backend:
 	@echo "Building backend Docker image..."
 	docker build -t spry-backend ./back
-	@echo "Deploying backend to AWS ECR/ECS..."
-	# Тут будуть AWS команди для ECR та ECS
