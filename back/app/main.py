@@ -1,5 +1,5 @@
 import logging
-
+this is a deliberate syntax error to fail linter
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
